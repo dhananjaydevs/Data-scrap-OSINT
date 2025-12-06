@@ -1,183 +1,69 @@
-import json
-from argparse import ArgumentParser
-
-import requests
-from requests.exceptions import MissingSchema
-
-from modules.info_reader import InfoReader
+import argparse
 from modules.scrapper import Scrapper
-
-banner: str = """
-▄▄▄█████▓ ██░ ██ ▓█████   ██████  ▄████▄   ██▀███   ▄▄▄       ██▓███   ██▓███  ▓█████  ██▀███  
-▓  ██▒ ▓▒▓██░ ██▒▓█   ▀ ▒██    ▒ ▒██▀ ▀█  ▓██ ▒ ██▒▒████▄    ▓██░  ██▒▓██░  ██▒▓█   ▀ ▓██ ▒ ██▒
-▒ ▓██░ ▒░▒██▀▀██░▒███   ░ ▓██▄   ▒▓█    ▄ ▓██ ░▄█ ▒▒██  ▀█▄  ▓██░ ██▓▒▓██░ ██▓▒▒███   ▓██ ░▄█ ▒
-░ ▓██▓ ░ ░▓█ ░██ ▒▓█  ▄   ▒   ██▒▒▓▓▄ ▄██▒▒██▀▀█▄  ░██▄▄▄▄██ ▒██▄█▓▒ ▒▒██▄█▓▒ ▒▒▓█  ▄ ▒██▀▀█▄  
-  ▒██▒ ░ ░▓█▒░██▓░▒████▒▒██████▒▒▒ ▓███▀ ░░██▓ ▒██▒ ▓█   ▓██▒▒██▒ ░  ░▒██▒ ░  ░░▒████▒░██▓ ▒██▒
-  ▒ ░░    ▒ ░░▒░▒░░ ▒░ ░▒ ▒▓▒ ▒ ░░ ░▒ ▒  ░░ ▒▓ ░▒▓░ ▒▒   ▓▒█░▒▓▒░ ░  ░▒▓▒░ ░  ░░░ ▒░ ░░ ▒▓ ░▒▓░
-    ░     ▒ ░▒░ ░ ░ ░  ░░ ░▒  ░ ░  ░  ▒     ░▒ ░ ▒░  ▒   ▒▒ ░░▒ ░     ░▒ ░      ░ ░  ░  ░▒ ░ ▒░
-  ░       ░  ░░ ░   ░   ░  ░  ░  ░          ░░   ░   ░   ▒   ░░       ░░          ░     ░░   ░ 
-          ░  ░  ░   ░  ░      ░  ░ ░         ░           ░  ░                     ░  ░   ░     
-                                 ░                                                            
-"""
-
-parser = ArgumentParser(description="TheScrapper - Contact finder")
-parser.add_argument("-u", "--url", required=False,
-                    help="The URL of the target.")
-parser.add_argument("-us", "--urls", required=False,
-                    help="A file containing multiple URLs.")
-parser.add_argument("-c", "--crawl", default=False, required=False, action="store_true",
-                    help="Use every URL found on the site and hunt it down for information.")
-parser.add_argument("-b", "--banner", default=False, required=False, action="store_true",
-                    help="Display banner.")
-parser.add_argument("-s", "--sm", default=False, required=False, action="store_true",
-                    help="Extract infos from the SocialMedia accounts.")
-parser.add_argument("-o", "--output", default=False, required=False, action="store_true",
-                    help="Save the output in a JSON file.")
-parser.add_argument("-v", "--verbose", default=False, required=False, action="store_true",
-                    help="Verbose output mode.")
-args = parser.parse_args()
+from modules.info_reader import InfoReader
 
 
-def verbPrint(content: str):
-    if args.verbose:
-        print(content)
+def process_url(url: str):
+    print(f"\nTarget → {url}")
+    print("=" * 60)
 
+    scrap = Scrapper(url)
+    links, text = scrap.crawl()
 
-target_type = ""
-if not args.url and not args.urls:
-    exit("Please add --url or --urls")
-else:
-    target_type = "URL" if args.url else "FILE"
+    print("FOUND LINKS:", links)
+    print("SCRAPPED TEXT PREVIEW:", text[:300])
 
-if not args.banner:
-    print(banner)
+    # Correct argument name
+    IR = InfoReader(text=text)
 
-# ---------------------------------------------------------------------
-# ---------------------------- URL MODE -------------------------------
-# ---------------------------------------------------------------------
-if target_type == "URL":
-    if not (args.url.startswith("https://") or args.url.startswith("http://")):
-        args.url = "http://" + args.url
+    print("RAW TEXT:", IR.text[:500])
 
-    print("*" * 50 + "\n" + f"Target: {args.url}" + "\n" + "*" * 50 + "\n")
-
-    requests.get(args.url)
-
-    url: str = args.url
-    verbPrint("Scraping (and crawling) started")
-
-    scrap = Scrapper(url=url, crawl=args.crawl)
-
-    # 🔥 DEBUG: PRINT LINKS FOUND
-    print("FOUND LINKS:", scrap.links)
-
-    # 🔥 DEBUG: SHOW RAW TEXT PREVIEW
-    raw = scrap.getText()
-    print("SCRAPPED TEXT PREVIEW:", raw.get("text", [""])[0][:500])
-
-    verbPrint("Scraping (and crawling) done\nReading and sorting information")
-
-    IR = InfoReader(content=scrap.getText())
-
-    # 🔥 DEBUG: SHOW WHAT INFOREADER EXTRACTED
-    print("RAW TEXT:", "\n".join(IR.content["text"])[:3000])
-    print("EXTRACTED EMAILS:", IR.getEmails())
-
+    # Extract info
     emails = IR.getEmails()
-    numbers = IR.getPhoneNumber()
-    sm = IR.getSocials()
+    phones = IR.getPhoneNumbers()
 
-    verbPrint("Reading and sorting information done")
+    # Correct method name
+    social = IR.getSocials()
 
-    print("\n")
-    print("E-Mails: " + "\n - ".join(emails))
-    print("Numbers:" + "\n - ".join(numbers))
+    return {
+        "emails": emails,
+        "phones": phones,
+        "social": social,
+        "links": links,
+        "raw": text
+    }
 
-    if args.sm:
-        print("SocialMedia: ")
-        sm_info = IR.getSocialsInfo()
-        for x in sm_info:
-            url = x["url"]
-            info = x["info"]
-            if info:
-                print(f" - {url}:")
-                for y in info:
-                    print(f"     - {y}: {info[y]}")
-            else:
-                print(f" - {url}")
-    else:
-        print("SocialMedia: " + ", ".join(sm))
 
-    if args.output:
-        out = {
-            "E-Mails": emails,
-            "SocialMedia": sm,
-            "Numbers": numbers
-        }
-        file_name = url.lower().replace(
-            "http://", "").replace("https://", "").replace("/", "")
-        json.dump(out, open(f"output/{file_name}.json", "w+"), indent=4)
+def main():
+    parser = argparse.ArgumentParser(description="V-Scrap — Simple Web Scraper & Info Extractor")
+    parser.add_argument("-u", "--url", required=True, help="Target URL to scrape")
 
-# ---------------------------------------------------------------------
-# ---------------------------- FILE MODE -------------------------------
-# ---------------------------------------------------------------------
-elif target_type == "FILE":
-    out = []
-    for url in open(args.urls, "r").readlines():
-        url = url.strip()
-        print("\n\n")
+    args = parser.parse_args()
 
-        if "https://" not in url and "http://" not in url:
-            url = "https://" + url
+    result = process_url(args.url)
 
-        print("*" * 50 + "\n" + f"Target: {url}" + "\n" + "*" * 50 + "\n")
+    print("\n" + "=" * 60)
+    print("V-SCRAP RESULTS")
+    print("=" * 60)
 
-        requests.get(url)
-        verbPrint("Scraping (and crawling) started")
+    print("\nE-Mails:")
+    for e in result["emails"]:
+        print(" -", e)
 
-        scrap = Scrapper(url=url, crawl=args.crawl)
+    print("\nNumbers:")
+    for p in result["phones"]:
+        print(" -", p)
 
-        # 🔥 SHOW FOUND LINKS
-        print("FOUND LINKS:", scrap.links)
+    print("\nSocial Media:")
+    for s in result["social"]:
+        print(" -", s)
 
-        # 🔥 SHOW TEXT SAFELY
-        raw = scrap.getText()
-        print("SCRAPPED TEXT PREVIEW:", raw.get("text", [""])[0][:500])
+    print("\nFound Links:")
+    for l in result["links"]:
+        print(" -", l)
 
-        verbPrint("Scraping (and crawling) done\nReading and sorting information")
+    print("\nDone.")
 
-        IR = InfoReader(content=raw)
-        emails = IR.getEmails()
-        numbers = IR.getPhoneNumber()
-        sm = IR.getSocials()
 
-        out.append({
-            "Target": url,
-            "E-Mails": emails,
-            "SocialMedia": sm,
-            "Numbers": numbers
-        })
-
-        verbPrint("Reading and sorting information done")
-
-        print("E-Mails:\n" + "\n - ".join(emails))
-        print("Numbers:\n" + "\n - ".join(numbers))
-
-        if args.sm:
-            print("SocialMedia: ")
-            sm_info = IR.getSocialsInfo()
-            for x in sm_info:
-                url = x["url"]
-                info = x["info"]
-                if info:
-                    print(f" - {url}:")
-                    for y in info:
-                        print(f"     - {y}: {info[y]}")
-                else:
-                    print(f" - {url}")
-        else:
-            print("SocialMedia: " + ", ".join(sm))
-
-    if args.output:
-        file_name = args.urls.replace("/", "_")
-        json.dump(out, open(f"output/{file_name}.json", "w+"), indent=4)
+if __name__ == "__main__":
+    main()
